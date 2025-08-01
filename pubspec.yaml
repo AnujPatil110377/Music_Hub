@@ -1,0 +1,41 @@
+name: beat_sync
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.3 <4.0.0' # Loosened the constraint slightly for better compatibility
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Core Functionality
+  supabase_flutter: ^2.5.2
+#  flutter_webrtc: ^0.9.48 # Check pub.dev for the latest stable version
+#  youtube_player_flutter: ^8.1.2 # Check pub.dev for the latest stable version
+
+  # UI & Utilities
+  cupertino_icons: ^1.0.8
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^5.1.1
+  shared_preferences: ^2.2.3
+  uuid: ^4.4.0
+  intl: ^0.19.0 # Use a more recent version
+  just_audio: ^0.10.5
+  just_waveform: ^0.0.7
+  audio_waveforms: ^1.3.0
+  just_audio_background: ^0.0.1-beta.17
+  http: ^1.5.0
+  flutter_cache_manager: ^3.4.1
+  provider: ^6.0.5
+  google_fonts: ^6.1.0
+#
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0 # Updated to a more recent version
+
+flutter:
+  uses-material-design: true
