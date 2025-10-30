@@ -1,56 +1,59 @@
-﻿Beat Sync 
-[
-[
-[
+﻿# Beat Sync 
 
-A Flutter application for synchronized music playback across multiple devices using Supabase and just_audio. One device acts as the host while others join as listeners, with real-time playback state, timing, and playlist progression shared via Supabase.
+A Flutter application for synchronized music playback across multiple devices using Supabase and just_audio. One device acts as the host while others join as listeners; playback state, timing, and playlist progression are shared via Supabase.
 
- Features
- Host-Listener Architecture - One device controls, others follow seamlessly
+---
 
- Real-time Synchronization - Sub-second accuracy across all connected devices
+## Table of contents
+- [Features](#features)
+- [Quick start](#quick-start)
+- [Project structure](#project-structure)
+- [How it works](#how-it-works)
+  - [Host flow](#host-flow)
+  - [Listener flow](#listener-flow)
+- [Configuration](#configuration)
+- [Permissions](#permissions)
+- [Building for production](#building-for-production)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License & Support](#license--support)
 
- Auto Drift Correction - Intelligent timing adjustments to maintain sync
+---
 
- Smart Caching - Pre-loads songs for smooth transitions and offline resilience
+## Features
+- Host–Listener architecture (one device controls, others follow)
+- Real-time synchronization (sub-second accuracy)
+- Automatic drift correction (threshold-based adjustments)
+- Smart caching (preloads songs for smooth transitions)
+- Cross-platform: Android & iOS
+- Playlist management with seamless track switching
 
- Cross-Platform - Works on Android and iOS devices
+## Quick start
+Prerequisites:
+- Flutter SDK (>= 3.0.0)
+- Dart SDK (>= 3.0.0)
+- Supabase account + project
+- Android Studio / VS Code
 
- Playlist Management - Dynamic playlist progression with seamless track switching
+Clone and install:
 
- Quick Start
-Prerequisites
-Flutter SDK (>=3.0.0)
-
-Dart SDK (>=3.0.0)
-
-Supabase account and project
-
-Android Studio / VS Code
-
-Installation
-Clone the repository
-
-bash
+```bash
 git clone https://github.com/yourusername/beat-sync.git
 cd beat-sync
-Install dependencies
-
-bash
 flutter pub get
-Configure Supabase
+```
 
-Create .env file in project root:
+Configure Supabase: create a `.env` in the project root with:
 
-text
+```
 SUPABASE_URL=your_supabase_project_url
 SUPABASE_ANON_KEY=your_supabase_anon_key
-Set up database tables
+```
 
-Run this SQL in your Supabase SQL Editor:
+Create the DB tables (run in Supabase SQL editor):
 
-sql
--- Rooms table for sync state
+```sql
+-- rooms
 CREATE TABLE IF NOT EXISTS public.rooms (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   active_playlist_id UUID,
@@ -62,215 +65,121 @@ CREATE TABLE IF NOT EXISTS public.rooms (
   last_updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Playlist songs mapping
+-- playlist_songs
 CREATE TABLE IF NOT EXISTS public.playlist_songs (
   playlist_id UUID NOT NULL,
   sequence INT NOT NULL,
   song_name TEXT NOT NULL,
   PRIMARY KEY (playlist_id, sequence)
 );
+```
 
--- Enable real-time subscriptions
-ALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.playlist_songs ENABLE ROW LEVEL SECURITY;
-Upload music files
+Upload audio files to a Supabase Storage bucket (for example: `songs`).
 
-Upload your audio files to Supabase Storage bucket named songs
+Run the app:
 
-Run the app
-
-bash
+```bash
 flutter run
- Architecture
-Project Structure
-text
+```
+
+## Project structure
+```
 lib/
- sync_service.dart           #  Core synchronization engine
- audio_player_service.dart   #  Audio playback management
- caching_service.dart        #  Local file caching system
- music_service.dart          #  Supabase storage integration
- models/                     #  Data models
- screens/                    #  UI screens
- widgets/                    #  Reusable components
-Tech Stack
-ComponentTechnologyPurpose
-FrontendFlutter + DartCross-platform mobile app
-Audio Enginejust_audioHigh-quality audio playback
-BackendSupabaseReal-time database & file storage
-CachingFlutter Cache ManagerLocal song storage
-State ManagementProvider/RiverpodApp state management
-🔧 How It Works
-Host Device Flow
-text
-graph TD
-    A[Start Playback] --> B[Update Room State]
-    B --> C[Broadcast Position Every 2s]
-    C --> D{Song Finished?}
-    D -->|No| C
-    D -->|Yes| E[Load Next Song]
-    E --> F[Update Listeners]
-    F --> C
-Listener Device Flow
-text
-graph TD
-    A[Join Room] --> B[Heartbeat Sync Every 5s]
-    B --> C[Fetch Room State]
-    C --> D{State Changed?}
-    D -->|No| B
-    D -->|Yes| E[Sync Audio Position]
-    E --> F[Apply Drift Correction]
-    F --> B
-📱 Usage
-As a Host
-Create Room - Start a new sync session
+ sync_service.dart           # Core synchronization engine (host & listener)
+ audio_player_service.dart   # just_audio wrapper / singleton player
+ caching_service.dart        # Local caching and eviction
+ music_service.dart          # Supabase storage / signed URL fetcher
+ models/                     # Data models
+ screens/                    # UI screens
+ widgets/                    # Reusable components
+```
 
-Select Playlist - Choose songs to play
+## How it works
 
-Control Playback - Play, pause, skip tracks
+### Host flow
+1. Host starts playback and sets room state (sequence, name, url, is_playing=true, pos=0, last_updated_at=now).
+2. Host calls `startHostPositionUpdates(roomId)` and updates `rooms` every ~2 seconds with current position and timestamp.
+3. On track completion: host loads the next track, updates `rooms` with a signed URL for listeners, and resumes playback.
+4. Host can pre-cache next tracks and evict completed ones from cache.
 
-Monitor Listeners - See connected devices
+### Listener flow
+1. Listener calls `startHeartbeatSync(roomId)` and polls `rooms` (every ~5s by default).
+2. If URL or sequence changed, listener loads the new URL and seeks to `current_position_seconds + (now - last_updated_at)`.
+3. While playing, listeners correct drift only when deviation exceeds a threshold (default ~700ms).
+4. Listeners pre-cache the next song (sequence + 1) where possible.
 
-As a Listener
-Join Room - Enter room ID or scan QR code
+## Configuration
+Adjust intervals and thresholds in `sync_service.dart`:
 
-Automatic Sync - Audio syncs automatically
-
-Enjoy Music - Synchronized playback experience
-
- Configuration
-Sync Settings
-dart
-// Adjust sync intervals in sync_service.dart
+```dart
 static const Duration _hostUpdateInterval = Duration(seconds: 2);
 static const Duration _listenerSyncInterval = Duration(seconds: 5);
 static const int _driftCorrectionThresholdMs = 700;
-Cache Settings
-dart
-// Configure caching behavior
+```
+
+Cache settings (example):
+
+```dart
 static const int maxCacheSize = 500; // MB
 static const Duration cacheRetention = Duration(days: 7);
- Permissions
-Android
-Add to android/app/src/main/AndroidManifest.xml:
+```
 
-xml
+## Permissions
+**Android** (add to `android/app/src/main/AndroidManifest.xml`):
+
+```xml
 <uses-permission android:name="android.permission.INTERNET" />
 <uses-permission android:name="android.permission.WAKE_LOCK" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-
 <!-- For external storage (API < 29) -->
-<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
-                 android:maxSdkVersion="28" />
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-iOS
-Add to ios/Runner/Info.plist:
+```
 
-xml
+Prefer using app-internal storage to avoid extra permissions on modern Android.
+
+**iOS** (add to `ios/Runner/Info.plist`):
+
+```xml
 <key>NSMicrophoneUsageDescription</key>
 <string>This app needs audio permissions for music playback</string>
 <key>UIBackgroundModes</key>
 <array>
-    <string>audio</string>
+  <string>audio</string>
 </array>
- Building for Production
-Android APK
-bash
-flutter build apk --release --split-per-abi
-iOS App Store
-bash
-flutter build ios --release
-Web (Experimental)
-bash
-flutter build web --release
- Troubleshooting
-Common Issues
- Sync not working
+```
 
-Check internet connection
+## Building for production
+- Android APK: `flutter build apk --release --split-per-abi`
+- iOS App Store: `flutter build ios --release`
+- Web (experimental): `flutter build web --release`
 
-Verify Supabase credentials
+## Troubleshooting
+**Sync not working**
+- Check network & Supabase credentials
+- Verify the `rooms` record exists and the `last_updated_at` field is recent
 
-Ensure room exists in database
+**Audio not playing**
+- Check device volume & supported audio format
+- Test with another audio file or direct URL
 
- Audio not playing
+**High battery usage**
+- Reduce sync frequency
+- Consider background execution and platform-specific battery optimizations
 
-Check device volume
+## Contributing
+1. Fork the repo
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Commit your changes and push
+4. Open a Pull Request
 
-Verify audio file format (MP3, AAC, WAV supported)
+Please follow Dart style and run `flutter format` before committing.
 
-Test with different audio files
+## License & Support
+This project is licensed under the MIT License. See `LICENSE` for details.
 
- High battery usage
+Support: support@beatsync.app
 
-Reduce sync frequency in settings
+---
 
-Enable battery optimization exclusion
-
-Debug Mode
-bash
-flutter run --debug --verbose
- Contributing
-We welcome contributions! Please see our Contributing Guide for details.
-
-Development Setup
-Fork the repository
-
-Create feature branch (git checkout -b feature/amazing-feature)
-
-Commit changes (git commit -m 'Add amazing feature')
-
-Push to branch (git push origin feature/amazing-feature)
-
-Open Pull Request
-
-Code Style
-Follow Dart Style Guide
-
-Use flutter format before committing
-
-Add tests for new features
-
- Performance
-MetricValue
-Sync Accuracy<100ms typical
-Memory Usage~50MB baseline
-Battery ImpactMinimal with optimizations
-Network Usage~1KB/s per listener
- Roadmap
- Web Dashboard - Browser-based room management
-
- Voice Chat - Optional voice communication
-
- Advanced Playlists - Collaborative playlist editing
-
- Analytics - Usage statistics and insights
-
- Offline Mode - Limited functionality without internet
-
- Custom Themes - Personalized UI customization
-
- License
-This project is licensed under the MIT License - see the LICENSE file for details.
-
- Acknowledgments
-just_audio - Excellent Flutter audio plugin
-
-Supabase - Amazing backend-as-a-service platform
-
-Flutter Team - Outstanding cross-platform framework
-
- Support
- Email: support@beatsync.app
-
- Discussions: GitHub Discussions
-
- Issues: GitHub Issues
-
- Discord: Join our community
-
-<div align="center">
-Made with  using Flutter
-
- Star this repo -  Fork it -  Share it
-
-</div>
+*If you'd like, I can add a `README` table of contents links, `.env.example`, or a `CONTRIBUTING.md` next.*
